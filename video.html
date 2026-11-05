@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fig. 13 video scene</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin:0; background:#fbf5e6; }
+  body { display:flex; justify-content:center; }
+  svg { width:min(100%,760px); height:auto; display:block; }
+</style>
+</head>
+<body>
+<!-- Build source for exports/cyclic-group-loop.mp4 (a scripted run: +1, +2, +3). Not the published page: index.html stays standalone.
+     Export: python3 design/tools/export.py cyclic-group/video.html --out cyclic-group/exports/cyclic-group-loop.mp4. Open it plain to watch the loop. -->
+<svg id="fig" viewBox="0 0 800 895" role="img" aria-label="The clock Z / 6Z. Plus one visits all six perches, plus two makes a triangle of three, plus three swings between two."></svg>
+<script src="../design/tools/export-page.js"></script>
+<script src="../design/meme/parts.js"></script>
+<script>
+const EXPORT = { format: "mp4", width: 1000, height: 1120, fps: 30, seconds: 12, loop: true, sound: true, background: "paper" };
+
+// Words read at phone size: the figure shrinks to about half on a phone, so words are drawn bigger (ZOOM).
+// { raw: true } skips it (numbers that sit inside a circle).
+const ZOOM = 1.35;
+function bigText(m) {
+  const t = m.text, g = m.tag; let inTag = false;
+  m.text = (x, y, s, o = {}) => t(x, y, s, (inTag || o.raw) ? o : { ...o, size: Math.round((o.size || 18) * ZOOM) });
+  m.tag = (x, y, s, k, o = {}) => { inTag = true; const r = g(x, y, s, k, { ...o, size: Math.round((o.size || 18) * ZOOM), ...(o.width ? { width: Math.round(o.width * ZOOM) } : {}) }); inTag = false; return r; };
+  return m;
+}
+const LOOP = EXPORT.seconds, STEP = 0.5, HOP = 0.42;
+const svg = document.getElementById('fig');
+const CX = 400, CY = 435, R = 240, PR = 36;
+const P = k => { const a = -Math.PI / 2 + k * Math.PI / 3; return [CX + R * Math.cos(a), CY + R * Math.sin(a), a]; };
+const NOTE = [349.2, 392, 440, 523.3, 587.3, 698.5];
+const CAPTION = {
+  0: ['Pick a hop.', 'Every hop can be undone.'],
+  1: ['+1 visits all six, then home.', 'Undo it with +5, the other way round.'],
+  2: ['+2 only lands on 0, 2, 4: a triangle.', '1, 3 and 5 never get a visit.'],
+  3: ['+3 just swings between 0 and 3.', 'It is its own undo: 3 + 3 = 6 = 0.'],
+};
+const SEGS = [{ d: 1, t0: 1.0 }, { d: 2, t0: 5.0 }, { d: 3, t0: 8.0 }];
+const RESET = 11.0;
+const hops = d => { const n = 6 / (d === 1 ? 1 : d === 2 ? 2 : 3), out = []; for (let i = 0; i < n; i++) out.push({ a: (i * d) % 6, b: ((i + 1) * d) % 6 }); return out; };
+
+function stateAt(t) {
+  let seg = null;
+  if (t < RESET) for (const s of SEGS) if (t >= s.t0) seg = s;
+  if (!seg) return { cap: 0, trail: [], seen: new Set([0]), done: false, tok: null, at: 0 };
+  const hs = hops(seg.d), trail = [], seen = new Set([0]);
+  let tok = null, at = 0;
+  hs.forEach((h, i) => {
+    const s = seg.t0 + i * STEP;
+    if (t >= s + HOP) { trail.push(h); seen.add(h.b); at = h.b; }
+    else if (t >= s) {
+      const u = (t - s) / HOP, e = u * u * (3 - 2 * u), A = P(h.a), B = P(h.b);
+      tok = [A[0] + (B[0] - A[0]) * e, A[1] + (B[1] - A[1]) * e - Math.sin(Math.PI * e) * 14];
+    }
+  });
+  return { cap: seg.d, trail, seen, done: t >= seg.t0 + hs.length * STEP, tok, at };
+}
+
+function draw(p) {
+  const t = (p * LOOP) % LOOP, st = stateAt(t);
+  svg.replaceChildren();
+  const m = bigText(MemeParts.piece(svg));
+  m.tag(16, 26, 'Fig. 13', 'peach', { size: 16 });
+  m.title(CX, 46, 'hop around the clock', { size: 34 });
+  m.text(CX, 86, '6 perches on a clock (Z / 6Z)', { size: 18, weight: 400 });
+  const OFF = 7;
+  st.trail.forEach(({ a, b }) => {
+    const A = P(a), B = P(b), dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy);
+    const nx = dy / L * OFF, ny = -dx / L * OFF, ux = dx / L, uy = dy / L;
+    m.arrow(A[0] + nx + ux * PR, A[1] + ny + uy * PR, B[0] + nx - ux * (PR + 3), B[1] + ny - uy * (PR + 3), { size: 11 });
+  });
+  for (let k = 0; k < 6; k++) {
+    const [x, y, a] = P(k), here = st.at === k && !st.tok;
+    const never = st.done && !st.seen.has(k);
+    if (never) m.circle(x, y, PR, null, { dash: MemeParts.DASH });
+    else if (here && st.cap) m.circle(x, y, PR, 'coral', { t: 1.15 });
+    else if (st.seen.has(k)) m.circle(x, y, PR, k === 0 ? 'peach' : 'coral', { t: k === 0 ? 1.3 : 0.7 });
+    else m.circle(x, y, PR, k === 0 ? 'peach' : 'sky');
+    const tx = x + Math.cos(a) * (PR + 32), ty = y + Math.sin(a) * (PR + 32);
+    m.tag(tx, ty, '' + k, never ? 'sky' : k === 0 ? 'peach' : 'coral', { anchor: 'middle', size: 22, width: 32 });
+  }
+  if (st.tok) m.circle(st.tok[0], st.tok[1], 15, 'coral', { t: 2, lift: [st.tok[0] + 4, st.tok[1] + 3.5] });
+  const [c1, c2] = CAPTION[st.cap];
+  m.text(CX, 796, c1, { size: 22 });
+  m.text(CX, 836, c2, { size: 18, weight: 400 });
+  if (st.done) { const n = st.seen.size; m.text(CX, 874, n === 6 ? 'reaches all 6' : 'reaches ' + n + ': a smaller clock inside', { size: 18, color: '#c4543a' }); }
+}
+
+// ---- sound: offline render, same voices as MemeSound ----
+async function renderAudio() {
+  const SR = 44100, ac = new OfflineAudioContext(1, SR * LOOP, SR);
+  const note = (f, t, dur, vol, type) => {
+    const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.value = f;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur + 0.05);
+  };
+  SEGS.forEach(s => hops(s.d).forEach((h, i) => {
+    const t = s.t0 + i * STEP + HOP;
+    if (h.b === 0) [349.2, 440, 523.3].forEach((f, j) => note(f, t + j * 0.07, 0.9, 0.07, 'triangle'));
+    else note(NOTE[h.b], t, 0.5, 0.1, 'triangle');
+  }));
+  const buf = await ac.startRendering(), d = buf.getChannelData(0);
+  const out = new DataView(new ArrayBuffer(44 + d.length * 2)), w = (o, s) => [...s].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
+  w(0, 'RIFF'); out.setUint32(4, 36 + d.length * 2, true); w(8, 'WAVEfmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true);
+  out.setUint16(22, 1, true); out.setUint32(24, SR, true); out.setUint32(28, SR * 2, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true);
+  w(36, 'data'); out.setUint32(40, d.length * 2, true);
+  for (let i = 0; i < d.length; i++) out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, d[i])) * 32767, true);
+  return new Blob([out], { type: 'audio/wav' });
+}
+
+const fontReady = () => Promise.all([...document.querySelectorAll('link[rel=stylesheet]')].map(l => l.sheet ? 1 : new Promise(y => l.addEventListener('load', y)))).then(() => document.fonts.load('700 20px Nunito'));
+if (ExportPage.wanted) fontReady().then(() => MemeParts.export(svg, draw, EXPORT, { audio: renderAudio }));
+else { draw(0); document.fonts.ready.then(() => { const t0 = performance.now(); const f = now => { draw(((now - t0) / 1000 % LOOP) / LOOP); requestAnimationFrame(f); }; requestAnimationFrame(f); }); }
+</script>
+</body>
+</html>

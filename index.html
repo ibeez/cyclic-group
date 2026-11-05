@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Cyclic Group, Fig. 13</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  :root { --paper:#fbf5e6; --ink:#48545c; --pale:#f3dccf; color-scheme: light; }
+  html, body { background: var(--paper); color: var(--ink); }
+  body { margin:0; font-family:"Nunito",system-ui,sans-serif; display:flex; flex-direction:column; align-items:center;
+    gap:14px; padding:20px max(16px,env(safe-area-inset-right)) 40px max(16px,env(safe-area-inset-left)); }
+  svg { width:min(100%,640px); height:auto; display:block; }
+  .controls { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+  button { font:700 18px/1 "Nunito",system-ui,sans-serif; color:var(--ink); background:#fdeee5; border:2.2px solid var(--ink);
+    border-radius:10px; padding:10px 16px; cursor:pointer; box-shadow:3px 2.5px 0 #f1b9a3; }
+  button:active { transform:translate(2px,1.5px); box-shadow:1px 1px 0 #f1b9a3; }
+  button:focus-visible { outline:2px solid #2a6fd6; outline-offset:3px; }
+  button.quiet { background:transparent; box-shadow:none; border-style:dashed; font-size:15px; padding:8px 12px; }
+  .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+</style>
+</head>
+<body>
+<svg id="fig" viewBox="0 0 800 895" role="img"
+  aria-label="Fig. 13. The cyclic group Z / 6Z, clock addition on six perches 0 to 5. Plus one visits all six, plus two makes a triangle of three, plus three swings between two. Every hop can be undone."></svg>
+
+<div class="controls" id="hops"></div>
+<div class="controls">
+  <button class="quiet" id="home" type="button">back to 0</button>
+  <button class="quiet" id="snd" type="button">sound: off</button>
+</div>
+<div class="sr" aria-live="polite" id="live"></div>
+
+<script>
+// MemeParts, inlined from design/meme/parts.js so this page works standalone
+// MemeParts: the memetic classroom style in SVG. Ink is exact (Blue Grey B47, even weight);
+// colour is the same shape, offset down-right, flat, behind the ink. What Judy approved is in
+// meme-lessons.md, and meme-parts.html shows every part.
+//
+//   const m = bigText(MemeParts.piece(svg));          // adds color, ink and words layers to an <svg>
+//   m.circle(80, 60, 20, 'coral');           // ink circle, coral fill offset under it
+//   m.tag(108, 48, 'sick', 'coral');         // the approved label: a word on a small pale box
+//   m.arrow(20, 30, 90, 30);                 // solid ink head
+//   m.count(20, 100, 1, 10, '1 in 10 are sick');
+//   m.unknown(200, 60, 20);                  // dashed: not known yet
+//
+// Colours are the four marker inks measured from her swatches (coral, peach, sky, blue), at
+// strength t (1 is one pass). Any hex also works. Leave the colour out for ink only.
+// Every colour has a job: JOB.mine is warm (my path, the thing that matters), JOB.other is cool.
+(function () {
+  const PAPER = [251, 245, 230], INK = '#48545c', GREY = '#9faab5';
+  const ABS = { coral: [0, 1.09165, .95707], peach: [0, .35405, .36744], sky: [.45222, .13499, 0], blue: [1.14163, .50752, 0] };
+  const JOB = { mine: 'coral', other: 'sky', start: 'peach', many: 'blue' };
+  const tint = (k, t = 1) => k[0] === '#' ? k : 'rgb(' + PAPER.map((p, i) => Math.round(p * Math.exp(-t * ABS[k][i]))).join() + ')';
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (t, a, p) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); p && p.appendChild(e); return e; };
+  const W = 2.2, OX = 3, OY = 2.5, DASH = '5 6';
+  // Auto-fit: tag boxes size to the real text width (bold, current font), so words never spill out.
+  const ctx = document.createElement('canvas').getContext('2d');
+  const measure = (s, size) => { ctx.font = `700 ${size}px ${window.MemeParts && window.MemeParts.FONT || 'Nunito'}, sans-serif`; return Math.ceil(ctx.measureText(s).width); };
+
+  function piece(svg, { ox = OX, oy = OY } = {}) {
+    const color = el('g', { transform: `translate(${ox},${oy})` }, svg), ink = el('g', {}, svg), words = el('g', {}, svg);
+    const stroke = o => ({ fill: 'none', stroke: o.inkColor || INK, 'stroke-width': o.w || W, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', ...(o.dash ? { 'stroke-dasharray': o.dash } : {}) });
+    const under = (o, g) => o.lift ? el('g', { transform: `translate(${o.lift[0] - ox},${o.lift[1] - oy})` }, g) : g;
+    const m = {
+      color, ink, words, tint, INK, GREY,
+      // shapes: k is a colour or null; o.t strength, o.noInk colour only, o.dash dashed ink, o.lift [dx,dy] own offset
+      circle(x, y, r, k, o = {}) {
+        if (k) el('circle', { cx: x, cy: y, r: r + 1.5, fill: tint(k, o.t) }, under(o, color));
+        if (!o.noInk) el('circle', { cx: x, cy: y, r, ...stroke(o) }, ink);
+      },
+      box(x, y, w, h, k, o = {}) {
+        const rx = o.rx ?? 3;
+        if (k) el('rect', { x, y, width: w, height: h, rx, fill: tint(k, o.t) }, under(o, color));
+        if (!o.noInk) el('rect', { x, y, width: w, height: h, rx, ...stroke(o) }, ink);
+      },
+      poly(pts, k, o = {}) {
+        const d = 'M' + pts.map(p => p.join(',')).join('L') + (o.open ? '' : 'Z');
+        if (k) el('path', { d, fill: tint(k, o.t) }, under(o, color));
+        if (!o.noInk) el('path', { d, ...stroke(o), ...(o.solid ? { fill: INK } : {}) }, ink);
+      },
+      line(x1, y1, x2, y2, o = {}) { el('line', { x1, y1, x2, y2, ...stroke(o) }, ink); },
+      // a line between two circles [x, y, r] that meets the ink edge, never the colour
+      link(a, b, o = {}) {
+        const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy), ra = a[2] || 0, rb = b[2] || 0;
+        m.line(a[0] + dx / l * ra, a[1] + dy / l * ra, b[0] - dx / l * rb, b[1] - dy / l * rb, o);
+      },
+      // Approved head is 'solid'. Others kept for the samples: 'open', 'color', 'none'
+      arrow(x1, y1, x2, y2, o = {}) {
+        const head = o.head || 'solid', s = o.size || 9, a = Math.atan2(y2 - y1, x2 - x1);
+        const p = q => [x2 + s * Math.cos(a + q), y2 + s * Math.sin(a + q)];
+        const back = head === 'open' || head === 'none' ? 0 : s * 0.8;
+        m.line(x1, y1, x2 - back * Math.cos(a), y2 - back * Math.sin(a), o);
+        if (head === 'open') m.poly([p(Math.PI * 0.8), [x2, y2], p(-Math.PI * 0.8)], null, { ...o, open: true });
+        if (head === 'solid') m.poly([p(Math.PI * 0.82), [x2, y2], p(-Math.PI * 0.82)], null, { ...o, solid: true });
+        if (head === 'color') m.poly([p(Math.PI * 0.82), [x2, y2], p(-Math.PI * 0.82)], o.k || 'coral', o);
+      },
+      // Words in ink, in MemeParts.FONT (Nunito, picked 11/3). o.size, o.anchor (middle), o.weight (700), o.color
+      text(x, y, s, o = {}) {
+        const t = el('text', { x, y, fill: o.color || INK, 'font-family': (o.font || window.MemeParts.FONT) + ', sans-serif', 'font-weight': o.weight || 700, 'font-size': o.size || 18, 'text-anchor': o.anchor || 'middle', 'dominant-baseline': 'central' }, words);
+        t.textContent = s; return t;
+      },
+      image(href, x, y, w, h) { el('image', { href, x, y, width: w, height: h }, words); },
+      // a pixel icon from PixelParts (load pixel/pixel.js and pixel/parts.js, after PixelInk.ready). Rejected for memes; kept for the samples.
+      pixel(name, x, y, size) { const c = document.createElement('canvas'); PixelInk.render(c, PixelParts.icon(name), { px: 12 }); m.image(c.toDataURL(), x, y, size, size); },
+
+      // ---- approved parts (round 2, 11/3) ----
+      // A label: the word on its own small pale box in the shape's colour, beside the shape. Returns its width.
+      tag(x, y, s, k, o = {}) {
+        const size = o.size || 18, w = o.width || measure(s, size) + 12, h = size + 6;
+        const left = o.anchor === 'end' ? x - w : o.anchor === 'middle' ? x - w / 2 : x;
+        m.box(left, y - h / 2, w, h, k, { t: 0.45 });
+        m.text(left + 6, y, s, { size, anchor: 'start' });
+        return w;
+      },
+      // A node: circle plus its tag on one side ('right', 'left', 'below').
+      node(x, y, r, k, label, side = 'right') {
+        m.circle(x, y, r, k);
+        if (!label) return [x, y, r];
+        if (side === 'right') m.tag(x + r + 8, y, label, k || JOB.other);
+        else if (side === 'left') m.tag(x - r - 8, y, label, k || JOB.other, { anchor: 'end' });
+        else m.tag(x, y + r + 20, label, k || JOB.other, { anchor: 'middle' });
+        return [x, y, r];
+      },
+      // Not known yet: dashed ink, no colour. Use { dash } on the link that leads to it.
+      unknown(x, y, r) { m.circle(x, y, r, null, { dash: DASH }); return [x, y, r]; },
+      // A count: the words with digits above, then n warm boxes and the rest cool.
+      count(x, y, n, of, words, o = {}) {
+        const size = o.box || 18, gap = o.gap || 4, rowW = of * (size + gap) - gap;
+        if (words) m.text(x + rowW / 2, y, words, { size: o.size || 24 });
+        for (let i = 0; i < of; i++) m.box(x + i * (size + gap), y + (words ? 26 : 0), size, size, i < n ? JOB.mine : JOB.many);
+        return rowW;
+      },
+      // A title: big and bold, centred, on top.
+      title(x, y, s, o = {}) { return m.text(x, y, s, { size: 30, ...o }); },
+      // Icons built from the style's own shapes, centred on x, y, about 2s across. coin, die, flag
+      icon(name, x, y, s = 24, k) {
+        if (name === 'coin') { m.circle(x, y, s, k || 'peach'); m.circle(x, y, s * 0.58); }
+        if (name === 'die') { m.box(x - s, y - s, 2 * s, 2 * s, k || 'sky', { rx: s * 0.3 }); [-1, 0, 1].forEach(i => m.circle(x + i * s * 0.48, y + i * s * 0.48, s * 0.13, null, { w: s * 0.13 })); }
+        if (name === 'flag') { m.box(x - s * 0.6, y - s, s * 1.4, s, k || 'coral'); m.line(x - s * 0.6, y - s, x - s * 0.6, y + s * 1.1); }
+      },
+    };
+    return m;
+  }
+
+  // ---- export ----
+  // Draws an SVG onto a canvas with the font embedded (latin only), so tools/export.py can record it.
+  const FONT_CSS = f => `https://fonts.googleapis.com/css2?family=${f.replace(/ /g, '+')}:wght@400;700&display=swap`;
+  const fonts = {};
+  const font = f => fonts[f] || (fonts[f] = fetch(FONT_CSS(f)).then(r => r.text()).then(css =>
+    Promise.all(css.split('/*').filter(b => b.startsWith(' latin */')).map(async b => {
+      const face = b.slice(b.indexOf('@font-face')), url = face.match(/url\((.*?)\)/)[1];
+      const blob = await (await fetch(url)).blob();
+      const data = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+      return face.replace(url, data);
+    }))).then(a => a.join('')));
+  async function toCanvas(svg, canvas) {
+    const [, , w, h] = svg.getAttribute('viewBox').split(' ').map(Number), copy = svg.cloneNode(true);
+    copy.setAttribute('xmlns', NS); copy.setAttribute('width', w); copy.setAttribute('height', h);
+    el('style', {}, copy).textContent = await font(window.MemeParts.FONT);
+    const img = new Image();
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(copy));
+    await img.decode();
+    canvas.width = canvas.width || w * 2; canvas.height = canvas.height || h * 2;
+    const g = canvas.getContext('2d'); g.clearRect(0, 0, canvas.width, canvas.height); g.drawImage(img, 0, 0, canvas.width, canvas.height);
+  }
+  // One line in a piece: if (ExportPage.wanted) MemeParts.export(svg, p => draw(p), EXPORT)
+  // draw(p) redraws the svg for p, 0 to 1 through the piece (a still piece can ignore p).
+  function exportPiece(svg, draw, EXPORT, opts) {
+    const canvas = document.createElement('canvas');
+    canvas.width = EXPORT.width; canvas.height = EXPORT.height;
+    return ExportPage.run(canvas, async p => { await draw(p); await toCanvas(svg, canvas); }, EXPORT, opts);
+  }
+
+  { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = FONT_CSS('Nunito'); document.head.append(l); }
+  window.MemeParts = { FONT: 'Nunito', piece, tint, el, toCanvas, export: exportPiece, INK, GREY, PAPER, JOB, DASH, colors: Object.keys(ABS), icons: ['coin', 'die', 'flag'] };
+})();
+</script>
+<script>
+// Words read at phone size: the figure shrinks to about half on a phone, so words are drawn bigger (ZOOM).
+// { raw: true } skips it (numbers that sit inside a circle).
+const ZOOM = 1.35;
+function bigText(m) {
+  const t = m.text, g = m.tag; let inTag = false;
+  m.text = (x, y, s, o = {}) => t(x, y, s, (inTag || o.raw) ? o : { ...o, size: Math.round((o.size || 18) * ZOOM) });
+  m.tag = (x, y, s, k, o = {}) => { inTag = true; const r = g(x, y, s, k, { ...o, size: Math.round((o.size || 18) * ZOOM), ...(o.width ? { width: Math.round(o.width * ZOOM) } : {}) }); inTag = false; return r; };
+  return m;
+}
+// export settings for ../design/tools/export.py (meme pieces: png via MemeParts.export)
+const EXPORT = { format: "png", width: 1600, height: 1790, background: "paper" };
+
+const svg = document.getElementById('fig');
+const CX = 400, CY = 435, R = 240, PR = 36;
+const P = k => { const a = -Math.PI / 2 + k * Math.PI / 3; return [CX + R * Math.cos(a), CY + R * Math.sin(a), a]; };
+const NOTE = [349.2, 392, 440, 523.3, 587.3, 698.5];
+
+const CAPTION = {
+  0: ['Pick a hop.', 'Every hop can be undone.'],
+  1: ['+1 visits all six, then home.', 'Undo it with +5, the other way round.'],
+  2: ['+2 only lands on 0, 2, 4: a triangle.', '1, 3 and 5 never get a visit.'],
+  3: ['+3 just swings between 0 and 3.', 'It is its own undo: 3 + 3 = 6 = 0.'],
+  4: ['+4 is +2 backwards: the same triangle.', '2 + 4 = 6 = 0, so each undoes the other.'],
+  5: ['+5 visits all six, the other way round.', 'It undoes +1: 1 + 5 = 6 = 0.'],
+};
+
+let st = { at: 0, trail: [], seen: new Set([0]), done: null, tok: null, cap: 0, busy: false };
+let AC = null, muted = true;
+
+function ping(f, dur = 0.55, vol = 0.1, type = 'triangle') {
+  if (muted || !AC) return;
+  const t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.value = f;
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(AC.destination); o.start(t); o.stop(t + dur + 0.05);
+}
+const chime = () => [349.2, 440, 523.3].forEach((f, i) => setTimeout(() => ping(f, 0.9, 0.07), i * 70));
+
+function draw() {
+  svg.replaceChildren();
+  const m = bigText(MemeParts.piece(svg));
+  m.tag(16, 26, 'Fig. 13', 'peach', { size: 16 });
+  m.title(CX, 46, 'hop around the clock', { size: 34 });
+  m.text(CX, 86, '6 perches on a clock (Z / 6Z)', { size: 18, weight: 400 });
+
+  // arrows first, so circles sit on top of the line ends
+  const OFF = 7;
+  st.trail.forEach(({ a, b, i }) => {
+    const A = P(a), B = P(b), dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy);
+    const nx = dy / L * OFF, ny = -dx / L * OFF, ux = dx / L, uy = dy / L;
+    m.arrow(A[0] + nx + ux * PR, A[1] + ny + uy * PR, B[0] + nx - ux * (PR + 3), B[1] + ny - uy * (PR + 3), { size: 11 });
+  });
+
+  for (let k = 0; k < 6; k++) {
+    const [x, y, a] = P(k), here = st.at === k && !st.tok;
+    const never = st.done !== null && !st.seen.has(k);
+    if (never) m.circle(x, y, PR, null, { dash: MemeParts.DASH });
+    else if (here) m.circle(x, y, PR, 'coral', { t: 1.15 });
+    else if (st.seen.has(k)) m.circle(x, y, PR, k === 0 ? 'peach' : 'coral', { t: k === 0 ? 1.3 : 0.7 });
+    else m.circle(x, y, PR, k === 0 ? 'peach' : 'sky');
+    const tx = x + Math.cos(a) * (PR + 32), ty = y + Math.sin(a) * (PR + 32);
+    m.tag(tx, ty, '' + k, never ? 'sky' : k === 0 ? 'peach' : 'coral', { anchor: 'middle', size: 22, width: 32 });
+  }
+  if (st.tok) { m.circle(st.tok[0], st.tok[1], 15, 'coral', { t: 2, lift: [st.tok[0] + 4, st.tok[1] + 3.5] }); }
+
+  const [c1, c2] = CAPTION[st.cap];
+  m.text(CX, 796, c1, { size: 22 });
+  m.text(CX, 836, c2, { size: 18, weight: 400 });
+  if (st.done !== null) {
+    const n = st.seen.size;
+    m.text(CX, 874, n === 6 ? 'reaches all 6' : 'reaches ' + n + ': a smaller clock inside', { size: 18, color: '#c4543a' });
+  }
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function run(d) {
+  if (st.busy) return;
+  if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  st.busy = true; st.cap = d; st.trail = []; st.seen = new Set([0]); st.done = null; st.at = 0;
+  document.getElementById('live').textContent = `Adding ${d} on the six clock.`;
+  draw();
+  let n = 0;
+  do {
+    const from = st.at, to = (from + d) % 6, A = P(from), B = P(to);
+    const t0 = performance.now(), dur = 520;
+    await new Promise(res => {
+      const f = now => {
+        const u = Math.min(1, (now - t0) / dur), e = u * u * (3 - 2 * u);
+        st.tok = [A[0] + (B[0] - A[0]) * e, A[1] + (B[1] - A[1]) * e - Math.sin(Math.PI * e) * 14];
+        draw();
+        u < 1 ? requestAnimationFrame(f) : res();
+      };
+      requestAnimationFrame(f);
+    });
+    st.tok = null; st.trail.push({ a: from, b: to }); st.seen.add(to); st.at = to; n++;
+    to === 0 ? chime() : ping(NOTE[to]);
+    draw(); await sleep(120);
+  } while (st.at !== 0 && n < 12);
+  st.done = d; st.busy = false; draw();
+}
+
+function reset() {
+  if (st.busy) return;
+  st = { at: 0, trail: [], seen: new Set([0]), done: null, tok: null, cap: 0, busy: false }; draw();
+}
+
+const hops = document.getElementById('hops');
+[1, 2, 3, 4, 5].forEach(d => {
+  const b = document.createElement('button'); b.type = 'button'; b.textContent = '+' + d;
+  b.setAttribute('aria-label', 'Hop plus ' + d); b.onclick = () => run(d); hops.append(b);
+});
+document.getElementById('home').onclick = reset;
+document.getElementById('snd').onclick = e => {
+  muted = !muted; e.target.textContent = 'sound: ' + (muted ? 'off' : 'on');
+  if (!muted && !AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (er) {} }
+  if (AC && AC.state === 'suspended') AC.resume();
+  if (!muted) ping(NOTE[0]);
+};
+addEventListener('keydown', e => { if (/^[1-5]$/.test(e.key)) run(+e.key); if (e.key === ' ' && e.target === document.body) { e.preventDefault(); run(1); } });
+
+draw();
+if (document.fonts) document.fonts.ready.then(draw);
+</script>
+</body>
+</html>
